@@ -18,7 +18,7 @@ export default function Hero() {
     vapiInstance.on("call-start", () => setIsCalling(true));
     vapiInstance.on("call-end", () => setIsCalling(false));
 
-    return () => vapiInstance.stop();
+    return () => { vapiInstance.stop(); };
   }, []);
 
   const handleToggleCall = () => {

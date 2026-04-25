@@ -1,5 +1,12 @@
-import { GoogleGenerativeAI, SchemaType } from "@google/generative-ai";
+import { GoogleGenerativeAI, SchemaType, HarmCategory, HarmBlockThreshold } from "@google/generative-ai";
 import { NextResponse } from "next/server";
+
+const SAFETY_SETTINGS = [
+  { category: HarmCategory.HARM_CATEGORY_HARASSMENT,        threshold: HarmBlockThreshold.BLOCK_NONE },
+  { category: HarmCategory.HARM_CATEGORY_HATE_SPEECH,       threshold: HarmBlockThreshold.BLOCK_NONE },
+  { category: HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT, threshold: HarmBlockThreshold.BLOCK_NONE },
+  { category: HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT, threshold: HarmBlockThreshold.BLOCK_NONE },
+];
 
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY!);
 
@@ -171,6 +178,7 @@ export async function POST(req: Request) {
   const model = genAI.getGenerativeModel({
     model: "gemini-2.5-flash",
     tools: tools as any,
+    safetySettings: SAFETY_SETTINGS,
     systemInstruction: `You are the Chitra Director Agent orchestrating a 9-step video production pipeline.
 Your agents: PDF Reader, Text Generator (Gemini), Image Generator, Avatar Creator, Voice Synthesiser, Music Generator, Video Generator, Video Editor, Search Agent.
 Current pipeline step: ${currentStep}/9.
@@ -203,8 +211,30 @@ ${savedScript ? `\nPREVIOUSLY GENERATED SCRIPT (use this for scene generation):\
       ]
     : message;
 
-  const result = await chat.sendMessage(messageParts);
   const sanitize = (s: string) => s.replace(/NeuroFlix|Neuroflix|neuroflix/g, "ChitraOps");
+  let result: Awaited<ReturnType<typeof chat.sendMessage>>;
+  try {
+    result = await chat.sendMessage(messageParts);
+  } catch (funcErr: any) {
+    const funcMsg: string = funcErr?.message ?? String(funcErr);
+    if (funcMsg.includes("PROHIBITED_CONTENT") || funcMsg.includes("Function call not available")) {
+      const textModel = genAI.getGenerativeModel({
+        model: "gemini-2.5-flash",
+        safetySettings: SAFETY_SETTINGS,
+      });
+      const textResult = await textModel.generateContent(
+        typeof messageParts === "string"
+          ? messageParts
+          : messageParts.map((p: any) => p.text ?? "").join(" ")
+      );
+      return NextResponse.json({
+        reply: sanitize(textResult.response.text()) || "I wasn't able to process that request due to a content policy restriction. Please try rephrasing your prompt.",
+        stepReached: currentStep,
+        activeTool: null,
+      });
+    }
+    throw funcErr;
+  }
   const call = result.response.functionCalls()?.[0];
 
   if (call) {
