@@ -438,70 +438,58 @@ function getToolFeedback(toolName: string, args: Record<string, string>): string
   return map[toolName] ?? "Processing…";
 }
 
-// Stability AI — generates a scene storyboard image
+// Stability AI v2beta — generates a scene storyboard image (text-to-image)
 async function generateSceneImage(description: string, artStyle: string): Promise<string | null> {
   try {
-    const res = await fetch(
-      "https://api.stability.ai/v1/generation/stable-diffusion-xl-1024-v1-0/text-to-image",
-      {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${process.env.STABILITY_API_KEY}`,
-          "Content-Type": "application/json",
-          Accept: "application/json",
-        },
-        body: JSON.stringify({
-          text_prompts: [
-            { text: `${artStyle} style, cinematic scene: ${description}`, weight: 1 },
-            { text: "blurry, distorted, low quality", weight: -1 },
-          ],
-          cfg_scale: 7,
-          height: 576,
-          width: 1024,
-          steps: 30,
-          samples: 1,
-        }),
-      }
-    );
+    const form = new FormData();
+    form.append("prompt", `${artStyle} style, cinematic scene: ${description}, high quality, detailed`);
+    form.append("negative_prompt", "blurry, distorted, low quality, watermark, text");
+    form.append("aspect_ratio", "16:9");
+    form.append("output_format", "png");
+
+    const res = await fetch("https://api.stability.ai/v2beta/stable-image/generate/core", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${process.env.STABILITY_API_KEY}`,
+        Accept: "image/*",
+      },
+      body: form,
+    });
     if (!res.ok) return null;
-    const data = await res.json();
-    const b64 = data.artifacts?.[0]?.base64;
-    return b64 ? `data:image/png;base64,${b64}` : null;
+    const buffer = await res.arrayBuffer();
+    return `data:image/png;base64,${Buffer.from(buffer).toString("base64")}`;
   } catch {
     return null;
   }
 }
 
-// Stability AI — generates a scene image guided by a reference image (img2img)
+// Stability AI v2beta — generates a scene image guided by a reference image (SD3 img2img)
 async function generateSceneImageFromReference(
   description: string,
   artStyle: string,
   referenceBase64: string
 ): Promise<string | null> {
   try {
-    const imageBuffer = Buffer.from(referenceBase64, "base64");
-    const formData = new FormData();
-    formData.append("init_image", new Blob([imageBuffer], { type: "image/png" }), "reference.png");
-    formData.append("text_prompts[0][text]", `${artStyle} style, cinematic scene matching reference visual style: ${description}, same color palette, same lighting mood, same art direction`);
-    formData.append("text_prompts[0][weight]", "1");
-    formData.append("text_prompts[1][text]", "blurry, distorted, low quality, different style, inconsistent lighting");
-    formData.append("text_prompts[1][weight]", "-1");
-    formData.append("cfg_scale", "10");
-    formData.append("image_strength", "0.5");
-    formData.append("steps", "35");
-    formData.append("samples", "1");
-    const res = await fetch(
-      "https://api.stability.ai/v1/generation/stable-diffusion-xl-1024-v1-0/image-to-image",
-      {
-        method: "POST",
-        headers: { Authorization: `Bearer ${process.env.STABILITY_API_KEY}`, Accept: "application/json" },
-        body: formData,
-      }
-    );
+    const form = new FormData();
+    form.append("image", new Blob([Buffer.from(referenceBase64, "base64")], { type: "image/png" }), "reference.png");
+    form.append("prompt", `${artStyle} style, cinematic scene matching reference visual style: ${description}, same color palette, same lighting mood, same art direction`);
+    form.append("negative_prompt", "blurry, distorted, low quality, different style, inconsistent lighting");
+    form.append("mode", "image-to-image");
+    form.append("strength", "0.5");
+    form.append("model", "sd3-large-turbo");
+    form.append("output_format", "png");
+
+    const res = await fetch("https://api.stability.ai/v2beta/stable-image/generate/sd3", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${process.env.STABILITY_API_KEY}`,
+        Accept: "image/*",
+      },
+      body: form,
+    });
     if (!res.ok) return null;
-    const data = await res.json();
-    const b64 = data.artifacts?.[0]?.base64;
-    return b64 ? `data:image/png;base64,${b64}` : null;
+    const buffer = await res.arrayBuffer();
+    return `data:image/png;base64,${Buffer.from(buffer).toString("base64")}`;
   } catch {
     return null;
   }
@@ -643,36 +631,30 @@ async function generateAvatarAngles(
   ];
 
   const results: Record<"front" | "right" | "left", string | null> = { front: null, right: null, left: null };
+  const imageBuffer = Buffer.from(imageBase64, "base64");
 
   for (const angle of angles) {
     try {
-      const imageBuffer = Buffer.from(imageBase64, "base64");
-      const formData = new FormData();
-      formData.append("init_image", new Blob([imageBuffer], { type: "image/png" }), "face.png");
-      formData.append("text_prompts[0][text]", angle.prompt);
-      formData.append("text_prompts[0][weight]", "1");
-      formData.append("text_prompts[1][text]", "different person, wrong face, blurry, distorted, multiple faces, extra limbs, bad anatomy, ugly, watermark, text");
-      formData.append("text_prompts[1][weight]", "-1");
-      formData.append("cfg_scale", "12");
-      formData.append("image_strength", "0.65");
-      formData.append("steps", "40");
-      formData.append("samples", "1");
+      const form = new FormData();
+      form.append("image", new Blob([imageBuffer], { type: "image/png" }), "face.png");
+      form.append("prompt", angle.prompt);
+      form.append("negative_prompt", "different person, wrong face, blurry, distorted, multiple faces, bad anatomy, watermark, text");
+      form.append("mode", "image-to-image");
+      form.append("strength", "0.65");
+      form.append("model", "sd3-large-turbo");
+      form.append("output_format", "png");
 
-      const res = await fetch(
-        "https://api.stability.ai/v1/generation/stable-diffusion-xl-1024-v1-0/image-to-image",
-        {
-          method: "POST",
-          headers: {
-            Authorization: `Bearer ${process.env.STABILITY_API_KEY}`,
-            Accept: "application/json",
-          },
-          body: formData,
-        }
-      );
+      const res = await fetch("https://api.stability.ai/v2beta/stable-image/generate/sd3", {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${process.env.STABILITY_API_KEY}`,
+          Accept: "image/*",
+        },
+        body: form,
+      });
       if (res.ok) {
-        const data = await res.json();
-        const b64 = data.artifacts?.[0]?.base64;
-        if (b64) results[angle.key] = `data:image/png;base64,${b64}`;
+        const buffer = await res.arrayBuffer();
+        results[angle.key] = `data:image/png;base64,${Buffer.from(buffer).toString("base64")}`;
       }
     } catch { /* continue with remaining angles */ }
   }
