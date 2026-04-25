@@ -1,5 +1,5 @@
 {
-  "name": "neuroflix-app",
+  "name": "chitraops-app",
   "version": "0.1.0",
   "private": true,
   "scripts": {
@@ -9,6 +9,11 @@
     "lint": "eslint"
   },
   "dependencies": {
+    "@google/generative-ai": "^0.24.1",
+    "@supabase/supabase-js": "^2.104.1",
+    "@vapi-ai/web": "^2.5.2",
+    "framer-motion": "^12.38.0",
+    "lucide-react": "^1.11.0",
     "next": "16.2.4",
     "react": "19.2.4",
     "react-dom": "19.2.4"

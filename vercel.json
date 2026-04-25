@@ -1,0 +1,14 @@
+{
+  "buildCommand": "next build",
+  "outputDirectory": ".next",
+  "framework": "nextjs",
+  "env": {
+    "GEMINI_API_KEY": "@gemini_api_key",
+    "HEYGEN_API_KEY": "@heygen_api_key",
+    "ELEVENLABS_API_KEY": "@elevenlabs_api_key",
+    "STABILITY_API_KEY": "@stability_api_key",
+    "RUNWAY_API_KEY": "@runway_api_key",
+    "HUGGINGFACE_API_KEY": "@huggingface_api_key",
+    "SHOTSTACK_API_KEY": "@shotstack_api_key"
+  }
+}
