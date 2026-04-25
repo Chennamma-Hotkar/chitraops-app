@@ -309,12 +309,12 @@ ${savedScript ? `\nPREVIOUSLY GENERATED SCRIPT (use this for scene generation):\
 
     if (call.name === "synthesize_voice") {
       const args = call.args as Record<string, string>;
-      const audioUrl = await synthesizeVoiceElevenLabs(
+      const { url: audioUrl, error: voiceError } = await synthesizeVoiceElevenLabs(
         args.script || message,
         args.voiceStyle || "professional"
       );
       return NextResponse.json({
-        reply: `Voice Synthesis Tool activated. Generating ${args.voiceStyle || "professional"} narration using ElevenLabs. ${audioUrl ? "Audio ready." : "Voice synthesis failed — check your ElevenLabs API key."}`,
+        reply: `Voice Synthesis Tool activated. Generating ${args.voiceStyle || "professional"} narration using ElevenLabs. ${audioUrl ? "Audio ready." : `Voice synthesis failed — ${voiceError ?? "check your ElevenLabs API key."}`}`,
         audioUrl,
         stepReached:  nextStep,
         activeTool:   call.name,
@@ -496,9 +496,13 @@ async function generateSceneImageFromReference(
 }
 
 // ElevenLabs — synthesises voice narration from script text
-async function synthesizeVoiceElevenLabs(script: string, voiceStyle: string): Promise<string | null> {
-  // Rachel (21m00Tcm4TlvDq8ikWAM) — clear professional female voice, free tier
-  const voiceId = "21m00Tcm4TlvDq8ikWAM";
+// Returns { url, error } so callers can surface the real failure reason
+async function synthesizeVoiceElevenLabs(
+  script: string,
+  voiceStyle: string
+): Promise<{ url: string | null; error: string | null }> {
+  // Sarah (EXAVITQu4vr4xnSDxMaL) — natural female voice, available on free tier
+  const voiceId = "EXAVITQu4vr4xnSDxMaL";
   try {
     const res = await fetch(
       `https://api.elevenlabs.io/v1/text-to-speech/${voiceId}`,
@@ -507,11 +511,10 @@ async function synthesizeVoiceElevenLabs(script: string, voiceStyle: string): Pr
         headers: {
           "xi-api-key":   process.env.ELEVENLABS_API_KEY!,
           "Content-Type": "application/json",
-          Accept:         "audio/mpeg",
         },
         body: JSON.stringify({
           text: script.substring(0, 2500),
-          model_id: "eleven_turbo_v2_5",
+          model_id: "eleven_multilingual_v2",
           voice_settings: {
             stability:        voiceStyle === "dramatic" ? 0.3 : 0.5,
             similarity_boost: 0.75,
@@ -519,12 +522,15 @@ async function synthesizeVoiceElevenLabs(script: string, voiceStyle: string): Pr
         }),
       }
     );
-    if (!res.ok) return null;
+    if (!res.ok) {
+      const body = await res.text().catch(() => "");
+      const detail = (() => { try { return JSON.parse(body)?.detail?.message ?? body; } catch { return body; } })();
+      return { url: null, error: `ElevenLabs ${res.status}: ${detail.slice(0, 200)}` };
+    }
     const buffer = await res.arrayBuffer();
-    const base64 = Buffer.from(buffer).toString("base64");
-    return `data:audio/mpeg;base64,${base64}`;
-  } catch {
-    return null;
+    return { url: `data:audio/mpeg;base64,${Buffer.from(buffer).toString("base64")}`, error: null };
+  } catch (e: any) {
+    return { url: null, error: e?.message ?? "Network error" };
   }
 }
 

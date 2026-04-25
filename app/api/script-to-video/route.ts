@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 
-const VOICE_ID = "21m00Tcm4TlvDq8ikWAM"; // ElevenLabs Rachel
+// Sarah (EXAVITQu4vr4xnSDxMaL) — natural female, available on free tier
+const VOICE_ID = "EXAVITQu4vr4xnSDxMaL";
 
 async function synthesizeVoice(script: string): Promise<string | null> {
   try {
@@ -9,11 +10,10 @@ async function synthesizeVoice(script: string): Promise<string | null> {
       headers: {
         "xi-api-key":   process.env.ELEVENLABS_API_KEY!,
         "Content-Type": "application/json",
-        Accept:         "audio/mpeg",
       },
       body: JSON.stringify({
         text: script.substring(0, 2500),
-        model_id: "eleven_turbo_v2_5",
+        model_id: "eleven_multilingual_v2",
         voice_settings: { stability: 0.5, similarity_boost: 0.75 },
       }),
     });
